@@ -4,11 +4,11 @@ class DDRControlModule extends Module {
   val io = new Bundle {
     val flash_en = Bool(INPUT)
     val flash_write = Bool(INPUT)
-    val IO = UInt(INPUT, 4)
+    val quad_io = UInt(INPUT, 4)
     val flash_addr = UInt(INPUT, 24)
     val flash_data_in = UInt(INPUT, 32)
-    val flash_data_out = UInt(INPUT, io.flash_data_in.getWidth)
-    val state_to_cpu = UInt(OUTPUT, 6)
+    val flash_data_out = UInt(INPUT, 32)
+    val state_to_cpu = UInt(OUTPUT)
     val SI = UInt(OUTPUT, 1)
     val tri_si = UInt(OUTPUT, 1)
   }
@@ -23,7 +23,7 @@ class DDRControlModule extends Module {
   val PP = UInt(0x02, 8)
   val QPP = UInt(0x32, 8)
 
-  val inst = UInt(0, 8)
+  val inst = UInt(0, 6)
 
   // state definition
   val st_idle = UInt(0, 6)
@@ -44,17 +44,24 @@ class DDRControlModule extends Module {
   val cs = Reg(init = UInt(1, 1))
 
   val write_old = Reg(init = UInt(0, 1))
-  val addr_old = Reg(init = Uint(0, 24))
+  val addr_old = Reg(init = UInt(0, 24))
   val buffer = Reg(init = UInt(0, 32))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | (state === st_idle & addr_old === io.flash_data_in &
       (write_old === io.flash_write)))
 
+  //default
+  io.SI := UInt(0)
+  io.tri_si := UInt(0)
+  io.state_to_cpu := Cat(state, sub_state)
+
+  inst := UInt(0, 6)
+
   when (state === st_idle) {
     when(~not_move) {
-      cs := 0
-      counter := 7
+      cs := UInt(0)
+      counter := UInt(7)
       when(io.flash_en & ~io.flash_write) {
         state := st_read
         sub_state := subst_issue_instr
@@ -68,49 +75,48 @@ class DDRControlModule extends Module {
 
   when (state === st_read) {
     when (sub_state === subst_issue_instr) {
-      inst := QREAD
-      SI := inst(counter(2, 0))
+      io.SI := QREAD(counter(2, 0))
       counter := counter - UInt(1)
-      when (counter === 0) {
+      when (counter === UInt(0)) {
         sub_state := subst_send_addr
-        counter := 23
+        counter := UInt(23)
       }
     }
     when (sub_state === subst_send_addr) {
-      SI := io.flash_addr(counter(4, 0))
+      io.SI := io.flash_addr(counter(4, 0))
       counter := counter - UInt(1)
-      when (counter === 0) {
+      when (counter === UInt(0)) {
         sub_state := subst_read_data_byte
-        counter := 0
+        counter := UInt(0)
       }
     }
 
-    when (subst_read_data_byte) {
+    when (sub_state === subst_read_data_byte) {
       io.tri_si := UInt(1)
       when (counter === UInt(0 + 2*0)) {
-        buffer(7 + 8*0, 4 + 8*0) := io.IO
+        buffer(7 + 8*0, 4 + 8*0) := io.quad_io
       }
       .elsewhen (counter === UInt(1 + 2*0)) {
-        buffer(3 + 8*0, 0 + 8*0) := io.IO
+        buffer(3 + 8*0, 0 + 8*0) := io.quad_io
       }
       .elsewhen (counter === UInt(0 + 2*1)) {
-        buffer(7 + 8*1, 4 + 8*1) := io.IO
+        buffer(7 + 8*1, 4 + 8*1) := io.quad_io
       }
       .elsewhen (counter === UInt(1 + 2*1)) {
-        buffer(3 + 8*1, 0 + 8*1) := io.IO
+        buffer(3 + 8*1, 0 + 8*1) := io.quad_io
       }
       .elsewhen (counter === UInt(0 + 2*2)) {
-        buffer(7 + 8*2, 4 + 8*2) := io.IO
+        buffer(7 + 8*2, 4 + 8*2) := io.quad_io
       }
       .elsewhen (counter === UInt(1 + 2*2)) {
-        buffer(3 + 8*2, 0 + 8*2) := io.IO
+        buffer(3 + 8*2, 0 + 8*2) := io.quad_io
       }
       .elsewhen (counter === UInt(0 + 2*3)) {
-        buffer(7 + 8*3, 4 + 8*3) := io.IO
+        buffer(7 + 8*3, 4 + 8*3) := io.quad_io
       }
       .otherwise {  //(counter === UInt(1 + 2*3))
-        buffer(3 + 8*3, 0 + 8*3) := io.IO
-        cs := 1
+        buffer(3 + 8*3, 0 + 8*3) := io.quad_io
+        cs := UInt(1)
         state := st_finish
       }
     }
@@ -135,7 +141,7 @@ class HelloModuleTests(c: DDRControlModule) extends Tester(c) {
 
 object hello {
   def main(args: Array[String]): Unit = {
-    chiselMainTest(Array[String]("--backend", "v", "--genHarness"),
+    chiselMainTest(Array[String]("--backend", "c", "--genHarness"),
       () => Module(new DDRControlModule())){c => new HelloModuleTests(c)}
   }
 }
