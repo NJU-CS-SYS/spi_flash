@@ -11,6 +11,7 @@ class SPIFlashModule extends Module {
     val state_to_cpu = UInt(OUTPUT)
     val SI = UInt(OUTPUT, 1)
     val tri_si = UInt(OUTPUT, 1)
+    val cs = UInt(OUTPUT, 1)
   }
 
   // cmd definition
@@ -31,12 +32,13 @@ class SPIFlashModule extends Module {
   val st_write = UInt(2, 6)
   val st_finish = UInt(3, 6)
 
-  val subst_set_wren = UInt(0, 6)
-  val subst_check_wren = UInt(1, 6)
-  val subst_read_req = UInt(2, 6)
-  val subst_issue_instr = UInt(3, 6)
-  val subst_send_addr = UInt(4, 6)
-  val subst_read_data_byte = UInt(5, 6)
+  val subst_idle = UInt(0, 6)
+  val subst_set_wren = UInt(1, 6)
+  val subst_check_wren = UInt(2, 6)
+  val subst_read_req = UInt(3, 6)
+  val subst_issue_instr = UInt(4, 6)
+  val subst_send_addr = UInt(5, 6)
+  val subst_read_data_byte = UInt(6, 6)
 
   val state = Reg(init = st_idle)
   val sub_state = Reg(init = st_idle)
@@ -48,7 +50,7 @@ class SPIFlashModule extends Module {
   val buffer = Reg(init = UInt(0, 32))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
-    | (state === st_idle & addr_old === io.flash_data_in &
+    | ((state === st_idle) & (addr_old === io.flash_addr) &
       (write_old === io.flash_write)))
 
   //default
@@ -93,6 +95,7 @@ class SPIFlashModule extends Module {
 
     when (sub_state === subst_read_data_byte) {
       io.tri_si := UInt(1)
+      counter := counter + UInt(1)
       when (counter === UInt(0 + 2*0)) {
         buffer(7 + 8*0, 4 + 8*0) := io.quad_io
       }
@@ -118,6 +121,7 @@ class SPIFlashModule extends Module {
         buffer(3 + 8*3, 0 + 8*3) := io.quad_io
         cs := UInt(1)
         state := st_finish
+        sub_state := st_idle
       }
     }
   }
@@ -132,11 +136,17 @@ class SPIFlashModule extends Module {
     write_old := io.flash_write
   }
 
-  val ram_write_old = Reg(init = UInt(0, 1))
+  io.cs := cs
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
-  step(1)
+  for (i <- 0 until 200) {
+    poke(c.io.flash_en, 1)
+    poke(c.io.flash_write, 0)
+    poke(c.io.flash_addr, 0xff00ff)
+    poke(c.io.flash_data_in, 0xffffffff)
+    step(1)
+  }
 }
 
 object hello {
