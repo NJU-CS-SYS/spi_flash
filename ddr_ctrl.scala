@@ -1,6 +1,6 @@
 import Chisel._
 
-class DDRControlModule extends Module {
+class SPIFlashModule extends Module {
   val io = new Bundle {
     val flash_en = Bool(INPUT)
     val flash_write = Bool(INPUT)
@@ -135,13 +135,13 @@ class DDRControlModule extends Module {
   val ram_write_old = Reg(init = UInt(0, 1))
 }
 
-class HelloModuleTests(c: DDRControlModule) extends Tester(c) {
+class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
   step(1)
 }
 
 object hello {
   def main(args: Array[String]): Unit = {
-    chiselMainTest(Array[String]("--backend", "c", "--genHarness"),
-      () => Module(new DDRControlModule())){c => new HelloModuleTests(c)}
+    chiselMainTest(args,
+      () => Module(new SPIFlashModule())){c => new FlashModuleTests(c)}
   }
 }
