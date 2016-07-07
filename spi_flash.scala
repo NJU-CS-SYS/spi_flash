@@ -17,6 +17,7 @@ class SPIFlashModule extends Module {
 
   // cmd definition
   val RDSR1 = Reg(init = UInt(0x05, 8))
+  val RDCR = Reg(init = UInt(0x35, 8))
   val WRR = Reg(init = UInt(0x01, 8))
   val WREN = Reg(init = UInt(0x06, 8))
   val WRDI = Reg(init = UInt(0x04, 8))
@@ -31,6 +32,7 @@ class SPIFlashModule extends Module {
   val st_read = UInt(1, 6)
   val st_write = UInt(2, 6)
   val st_finish = UInt(3, 6)
+  val st_set_quad = UInt(4, 6)
 
   val subst_idle = UInt(0, 6)
   val subst_set_wren = UInt(1, 6)
@@ -43,6 +45,15 @@ class SPIFlashModule extends Module {
   val subst_send_data = UInt(8, 6)
   val subst_check_r1 = UInt(9, 6)
   val subst_recv_sr1 = UInt(10,6)
+  val subst_req_cr = UInt(11,6)
+  val subst_recv_cr = UInt(12,6)
+  val subst_issue_wrr = UInt(13,6)
+  val subst_send_sr1 = UInt(14,6)
+  val subst_send_cr = UInt(15,6)
+  val subst_check_wip_1 = UInt(16,6)
+  val subst_check_wip_2 = UInt(17,6)
+  val subst_wait_cs_2 = UInt(18, 6)
+  val subst_wait_cs_3 = UInt(19, 6)
 
   val state = Reg(init = st_idle)
   val sub_state = Reg(init = st_idle)
@@ -53,6 +64,8 @@ class SPIFlashModule extends Module {
   val addr_old = Reg(init = UInt(0, 24))
   val buffer = Reg(init = UInt(0, 32))
   val reg_buffer = Reg(init = UInt(0, 8))
+  val reg_buffer_sr1 = Reg(init = UInt(0, 8))
+  val reg_buffer_cr = Reg(init = UInt(0, 8))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | ((state === st_idle) & (addr_old === io.flash_addr) &
@@ -69,12 +82,107 @@ class SPIFlashModule extends Module {
       cs := UInt(0)
       counter := UInt(7)
       when(io.flash_en & ~io.flash_write) {
-        state := st_read
-        sub_state := subst_issue_instr
+        state := st_set_quad
+        sub_state := subst_req_cr
       }
       when(io.flash_en & io.flash_write) {
         state := st_write
         sub_state := subst_set_wren
+      }
+    }
+  }
+
+  when (state === st_set_quad) {
+    when (sub_state === subst_req_cr) {
+      io.SI := RDCR(counter(2,0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_recv_cr
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_recv_cr) {
+      reg_buffer_cr(counter(2,0)) := io.quad_io(1)
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_wait_cs_1
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_wait_cs_1) {
+      sub_state := subst_req_sr1
+      cs := UInt(0)
+    }
+    when (sub_state === subst_req_sr1) {
+      io.SI := RDSR1(counter(2,0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_recv_sr1
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_recv_sr1) {
+      reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_wait_cs_2
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_wait_cs_2) {
+      sub_state := subst_issue_wrr
+      cs := UInt(0)
+    }
+    when (sub_state === subst_issue_wrr) {
+      io.SI := WRR(counter(2, 0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_send_sr1
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_send_sr1) {
+      io.SI := reg_buffer_sr1(counter(2, 0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_send_cr
+        counter := UInt(7)
+        reg_buffer_cr := reg_buffer_cr | UInt(2, 8) // set QUAD bit
+      }
+    }
+    when (sub_state === subst_send_cr) {
+      io.SI := reg_buffer_cr(counter(2, 0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_wait_cs_3
+        counter := UInt(7)
+        cs := UInt(1) // must
+      }
+    }
+    when (sub_state === subst_wait_cs_3) {
+      sub_state := subst_check_wip_1
+      cs := UInt(0)
+    }
+    when (sub_state === subst_check_wip_1) {
+      io.SI := RDSR1(counter(2,0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_check_wip_2
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_check_wip_2) {
+      reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        when (io.quad_io(1) === UInt(1)) {
+          sub_state := subst_check_wip_1
+        }
+        .otherwise {
+          state := st_read
+          sub_state := subst_issue_instr
+          counter := UInt(7)
+        }
       }
     }
   }
@@ -203,14 +311,12 @@ class SPIFlashModule extends Module {
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
-  for (addr <- 0 until 10) {
-    for (i <- 0 until 120) {
-      poke(c.io.flash_en, 1)
-      poke(c.io.flash_write, 0)
-      poke(c.io.flash_addr, 4*addr)
-      poke(c.io.flash_data_in, 0xffffffff)
-      step(1)
-    }
+  for (i <- 0 until 300) {
+    poke(c.io.flash_en, 1)
+    poke(c.io.flash_write, 0)
+    poke(c.io.flash_addr, 0xff00ff)
+    poke(c.io.flash_data_in, 0xffffffff)
+    step(1)
   }
 }
 

@@ -21,7 +21,7 @@ reg flash_en;
 reg flash_write;
 reg [23:0] flash_addr;
 // reg [31:0] flash_data_in;
-reg [21:0] counter;
+reg [22:0] counter;
 
 wire [11:0] state_to_cpu;
 // wire [31:0] flash_data_out;
@@ -42,31 +42,15 @@ always @ (posedge clk_50MHz) begin
     else begin
         flash_en <= 1;
         counter <= counter + 1;
-        if (counter == 1) begin
-            flash_addr <= flash_addr + 24'd4;
+        flash_addr <= {counter[21:0], 2'd0};
+        if (counter[22] == 1'b0) begin
+            flash_write <= 1;
+        end
+        if (counter[22] == 1'b1) begin
+            flash_write <= 0;
         end
     end
 end
-
-STARTUPE2 #(
-	.PROG_USR("FALSE"),  // Activate program event security feature. Requires encrypted bitstreams.
-	.SIM_CCLK_FREQ(10.0)  // Set the Configuration Clock Frequency(ns) for simulation.
-)
-STARTUPE2_inst (
-	.CFGCLK(CFGCLK),              // 1-bit output: Configuration main clock output
-	.CFGMCLK(CFGMCLK),             // 1-bit output: Configuration internal oscillator clock output
-	.EOS(EOS),              // 1-bit output: Active high output signal indicating the End Of Startup.
-	.PREQ(PREQ),                // 1-bit output: PROGRAM request to fabric output
-	.CLK(1'b0),             // 1-bit input: User start-up clock input
-	.GSR(1'b0),             // 1-bit input: Global Set/Reset input (GSR cannot be used for the port name)
-	.GTS(1'b0),             // 1-bit input: Global 3-state input (GTS cannot be used for the port name)
-	.KEYCLEARB(1'b0),       // 1-bit input: Clear AES Decrypter Key input from Battery-Backed RAM (BBRAM)
-	.PACK(1'b0),             // 1-bit input: PROGRAM acknowledge input
-	.USRCCLKO(~clk_50MHz),   // 1-bit input: User CCLK input
-	.USRCCLKTS(1'b0), // 1-bit input: User CCLK 3-state enable input
-	.USRDONEO(1'b1),   // 1-bit input: User DONE pin output control
-	.USRDONETS(1'b0)  // 1-bit input: User DONE 3-state enable output
-);
 
 clk_wiz_0 cw(
     .clk_in1(clk),
@@ -80,7 +64,7 @@ SPIFlashModule SPIFlashModule(
 	.io_flash_write(flash_write),
 	.io_quad_io(quad_io),
 	.io_flash_addr(flash_addr),
-	.io_flash_data_in( {17'd0, flash_data_in} ),
+	.io_flash_data_in( {flash_data_in, 17'd0} ),
 	.io_flash_data_out(buffer_val),
 	.io_state_to_cpu(state_to_cpu),
 	.io_SI(SI),
@@ -103,6 +87,26 @@ seg_ctrl sc(
 	.hex8(buffer_val[7*4+3 : 7*4+0]),
 	.seg_out(seg_out),
 	.seg_ctrl(seg_ctrl)
+);
+
+STARTUPE2 #(
+	.PROG_USR("FALSE"),  // Activate program event security feature. Requires encrypted bitstreams.
+	.SIM_CCLK_FREQ(10.0)  // Set the Configuration Clock Frequency(ns) for simulation.
+)
+STARTUPE2_inst (
+	.CFGCLK(CFGCLK),              // 1-bit output: Configuration main clock output
+	.CFGMCLK(CFGMCLK),             // 1-bit output: Configuration internal oscillator clock output
+	.EOS(EOS),              // 1-bit output: Active high output signal indicating the End Of Startup.
+	.PREQ(PREQ),                // 1-bit output: PROGRAM request to fabric output
+	.CLK(1'b0),             // 1-bit input: User start-up clock input
+	.GSR(1'b0),             // 1-bit input: Global Set/Reset input (GSR cannot be used for the port name)
+	.GTS(1'b0),             // 1-bit input: Global 3-state input (GTS cannot be used for the port name)
+	.KEYCLEARB(1'b0),       // 1-bit input: Clear AES Decrypter Key input from Battery-Backed RAM (BBRAM)
+	.PACK(1'b0),             // 1-bit input: PROGRAM acknowledge input
+	.USRCCLKO(~clk_50MHz),   // 1-bit input: User CCLK input
+	.USRCCLKTS(1'b0), // 1-bit input: User CCLK 3-state enable input
+	.USRDONEO(1'b1),   // 1-bit input: User DONE pin output control
+	.USRDONETS(1'b0)  // 1-bit input: User DONE 3-state enable output
 );
 
 endmodule

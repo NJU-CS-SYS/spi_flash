@@ -9,6 +9,7 @@ module test;
   wire[0:0] io_SI;
   wire[0:0] io_tri_si;
   wire[0:0] io_cs;
+  wire[0:0] io_ready;
   reg clk = 0;
   reg reset = 1;
   integer clk_len;
@@ -30,14 +31,15 @@ module test;
     .io_state_to_cpu(io_state_to_cpu),
     .io_SI(io_SI),
     .io_tri_si(io_tri_si),
-    .io_cs(io_cs));
+    .io_cs(io_cs),
+    .io_ready(io_ready));
 
   initial begin
     clk_len = `CLOCK_PERIOD;
     $init_clks(clk_len);
     $init_rsts(reset);
     $init_ins(io_flash_en, io_flash_write, io_quad_io, io_flash_addr, io_flash_data_in);
-    $init_outs(io_flash_data_out, io_state_to_cpu, io_SI, io_tri_si, io_cs);
+    $init_outs(io_flash_data_out, io_state_to_cpu, io_SI, io_tri_si, io_cs, io_ready);
     $init_sigs(SPIFlashModule);
     /*** VCD & VPD dump ***/
     if ($value$plusargs("vcdfile=%s", vcdfile)) begin
