@@ -92,8 +92,8 @@ class SPIFlashModule extends Module {
       cs := UInt(0)
       counter := UInt(7)
       when(io.flash_en & ~io.flash_write) {
-        state := st_set_quad
-        sub_state := subst_req_cr
+        state := st_read
+        sub_state := subst_issue_instr
       }
       when(io.flash_en & io.flash_write) {
         state := st_write
@@ -102,144 +102,9 @@ class SPIFlashModule extends Module {
     }
   }
 
-  when (state === st_set_quad) {
-    io.WP := UInt(1)
-    io.tri_wp := UInt(0)
-    when (sub_state === subst_req_cr) {
-      io.SI := RDCR(counter(2,0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_recv_cr
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_recv_cr) {
-      reg_buffer_cr(counter(2,0)) := io.quad_io(1)
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_wait_cs_1
-        cs := UInt(1)
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_wait_cs_1) {
-      sub_state := subst_req_sr1
-      cs := UInt(0)
-    }
-    when (sub_state === subst_req_sr1) {
-      io.SI := RDSR1(counter(2,0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_recv_sr1
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_recv_sr1) {
-      reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_wait_cs_2
-        cs := UInt(1)
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_wait_cs_2) {
-      sub_state := subst_issue_wrr
-      cs := UInt(0)
-    }
-    when (sub_state === subst_issue_wrr) {
-      io.SI := WRR(counter(2, 0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_send_sr1
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_send_sr1) {
-      io.SI := reg_buffer_sr1(counter(2, 0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_send_cr
-        counter := UInt(7)
-        reg_buffer_cr := reg_buffer_cr | UInt(0xc2, 8) // set QUAD bit
-      }
-    }
-    when (sub_state === subst_send_cr) {
-      io.SI := reg_buffer_cr(counter(2, 0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_wait_cs_3
-        counter := UInt(7)
-        cs := UInt(1) // must
-      }
-    }
-    when (sub_state === subst_wait_cs_3) {
-      sub_state := subst_check_wip_1
-      cs := UInt(0)
-    }
-    when (sub_state === subst_check_wip_1) {
-      io.SI := RDSR1(counter(2,0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_check_wip_2
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_check_wip_2) {
-      reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_wait_cs_4
-        cs := UInt(1)
-      }
-    }
-    when (sub_state === subst_wait_cs_4) {
-      cs := UInt(0)
-      counter := UInt(7)
-      when (reg_buffer_sr1(0) === UInt(1)) { // wait writing process
-        sub_state := subst_check_wip_1
-        err_counter := err_counter + UInt(1)
-      }
-      .otherwise {
-        sub_state := subst_req_cr_2
-      }
-    }
-    when (sub_state === subst_req_cr_2) {
-      io.SI := RDCR(counter(2,0))
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_recv_cr_2
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_recv_cr_2) {
-      reg_buffer_cr(counter(2,0)) := io.quad_io(1)
-      counter := counter - UInt(1)
-      when (counter === UInt(0)) {
-        sub_state := subst_wait_cs_5
-        cs := UInt(1)
-        counter := UInt(7)
-      }
-    }
-    when (sub_state === subst_wait_cs_5) {
-      when (reg_buffer_cr(7, 6) =/= UInt(3, 2)) {
-        state := state
-        sub_state := sub_state
-      }
-      .otherwise {
-        cs := UInt(0)
-        state := st_read
-        sub_state := subst_issue_instr
-        counter := UInt(7)
-        io.WP := UInt(0)
-        io.tri_wp := UInt(1)
-      }
-    }
-  }
-
   when (state === st_read) {
     when (sub_state === subst_issue_instr) {
-      io.SI := QREAD(counter(2, 0))
+      io.SI := READ(counter(2, 0))
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_send_addr
@@ -251,39 +116,21 @@ class SPIFlashModule extends Module {
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_read_data_byte
-        counter := UInt(0)
+        counter := UInt(7)
       }
     }
 
     when (sub_state === subst_read_data_byte) {
       io.tri_si := UInt(1)
-      counter := counter + UInt(1)
-      when (counter === UInt(0 + 2*0)) {
-        buffer(7 + 8*0, 4 + 8*0) := io.quad_io
-      }
-      .elsewhen (counter === UInt(1 + 2*0)) {
-        buffer(3 + 8*0, 0 + 8*0) := io.quad_io
-      }
-      .elsewhen (counter === UInt(0 + 2*1)) {
-        buffer(7 + 8*1, 4 + 8*1) := io.quad_io
-      }
-      .elsewhen (counter === UInt(1 + 2*1)) {
-        buffer(3 + 8*1, 0 + 8*1) := io.quad_io
-      }
-      .elsewhen (counter === UInt(0 + 2*2)) {
-        buffer(7 + 8*2, 4 + 8*2) := io.quad_io
-      }
-      .elsewhen (counter === UInt(1 + 2*2)) {
-        buffer(3 + 8*2, 0 + 8*2) := io.quad_io
-      }
-      .elsewhen (counter === UInt(0 + 2*3)) {
-        buffer(7 + 8*3, 4 + 8*3) := io.quad_io
-      }
-      .otherwise {  //(counter === UInt(1 + 2*3))
-        buffer(3 + 8*3, 0 + 8*3) := io.quad_io
-        cs := UInt(1)
-        state := st_finish
-        sub_state := subst_idle
+      buffer(counter(4, 0)) := io.quad_io(1)
+      counter(2, 0) := counter(2, 0) - UInt(1, 3)
+      when(counter(2, 0) === UInt(0, 3)) {
+        counter(4, 3) := counter(4, 3) + UInt(1, 2)
+        when (counter(4, 3) === UInt(3, 2)) {
+          cs := UInt(1)
+          state := st_finish
+          sub_state := subst_idle
+        }
       }
     }
   }
