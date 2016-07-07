@@ -9,6 +9,7 @@ class SPIFlashModule extends Module {
     val flash_data_in = UInt(INPUT, 32)
     val flash_data_out = UInt(INPUT, 32)
     val state_to_cpu = UInt(OUTPUT)
+    val buffer_to_cpu = UInt(OUTPUT, 32)
     val SI = UInt(OUTPUT, 1)
     val tri_si = UInt(OUTPUT, 1)
     val cs = UInt(OUTPUT, 1)
@@ -199,7 +200,7 @@ class SPIFlashModule extends Module {
     write_old := io.flash_write
   }
 
-
+  io.buffer_to_cpu := buffer
   io.cs := cs
 }
 

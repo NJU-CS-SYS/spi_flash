@@ -1,3 +1,4 @@
 *
 !*.scala
 !build.sbt
+!*.v
