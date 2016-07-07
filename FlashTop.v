@@ -14,7 +14,7 @@ module FlashTop(
 
 	inout [3:0] flash_dq,
     output flash_sck,
-    output flash_cs,
+    output flash_cs
 );
 
 reg flash_en;
@@ -23,21 +23,21 @@ reg [23:0] flash_addr;
 reg [31:0] flash_data_in;
 reg [15:0] counter;
 
-wire [11:0] state_to_cpu,
-wire [31:0] flash_data_out,
+wire [11:0] state_to_cpu;
+wire [31:0] flash_data_out;
 
 wire SI;
 wire tri_si;
 wire [3:0] quad_io;
 wire [31:0] buffer_val;
 
-always @ posedge(clk) begin
+always @ (posedge clk) begin
     if(reset) begin
         flash_en <= 0;
         flash_write <= 0;
         flash_addr <= 0;
         flash_data_in <= 0;
-        counter <= 0
+        counter <= 0;
     end
     else begin
         counter <= counter + 1;

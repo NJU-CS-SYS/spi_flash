@@ -16,16 +16,15 @@ class SPIFlashModule extends Module {
   }
 
   // cmd definition
-  val RDSR1 = UInt(0x05, 8)
-  val WRR = UInt(0x01, 8)
-  val WREN = UInt(0x06, 8)
-  val WRDI = UInt(0x04, 8)
-  val READ = UInt(0x03, 8)
-  val QREAD = UInt(0x6B, 8)
-  val PP = UInt(0x02, 8)
-  val QPP = UInt(0x32, 8)
+  val RDSR1 = Reg(init = UInt(0x05, 8))
+  val WRR = Reg(init = UInt(0x01, 8))
+  val WREN = Reg(init = UInt(0x06, 8))
+  val WRDI = Reg(init = UInt(0x04, 8))
+  val READ = Reg(init = UInt(0x03, 8))
+  val QREAD = Reg(init = UInt(0x6B, 8))
+  val PP = Reg(init = UInt(0x02, 8))
+  val QPP = Reg(init = UInt(0x32, 8))
 
-  val inst = UInt(0, 6)
 
   // state definition
   val st_idle = UInt(0, 6)
@@ -64,7 +63,6 @@ class SPIFlashModule extends Module {
   io.tri_si := UInt(0)
   io.state_to_cpu := Cat(state, sub_state)
 
-  inst := UInt(0, 6)
 
   when (state === st_idle) {
     when(~not_move) {
