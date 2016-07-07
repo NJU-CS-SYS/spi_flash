@@ -41,7 +41,9 @@ always @ (posedge clk_50MHz) begin
     end
     else begin
         flash_en <= 1;
-        counter <= counter + 1;
+        if (flash_ready) begin
+            counter <= counter + 1;
+        end
         flash_addr <= {counter[21:0], 2'd0};
         if (counter[22] == 1'b0) begin
             flash_write <= 1;
@@ -69,7 +71,8 @@ SPIFlashModule SPIFlashModule(
 	.io_state_to_cpu(state_to_cpu),
 	.io_SI(SI),
 	.io_tri_si(tri_si),
-	.io_cs(flash_cs)
+	.io_cs(flash_cs),
+	.io_ready(flash_ready)
 );
 
 assign flash_dq[3:0] = tri_si ? 4'bzzzz : {3'd0, SI};

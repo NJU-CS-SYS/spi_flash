@@ -308,6 +308,7 @@ class SPIFlashModule extends Module {
 
   io.flash_data_out := buffer
   io.cs := cs
+  io.ready := not_move | (state === st_finish)
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
