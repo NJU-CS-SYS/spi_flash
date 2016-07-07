@@ -39,6 +39,10 @@ class SPIFlashModule extends Module {
   val subst_issue_instr = UInt(4, 6)
   val subst_send_addr = UInt(5, 6)
   val subst_read_data_byte = UInt(6, 6)
+  val subst_wait_cs_1 = UInt(7, 6)
+  val subst_send_data = UInt(8, 6)
+  val subst_check_r1 = UInt(9, 6)
+  val subst_recv_sr1 = UInt(10,6)
 
   val state = Reg(init = st_idle)
   val sub_state = Reg(init = st_idle)
@@ -130,7 +134,7 @@ class SPIFlashModule extends Module {
   when (state === st_write) {
     when (sub_state === subst_set_wren) {
       io.SI := WREN(counter(2,0))
-      counter := counter - 1
+      counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_wait_cs_1
         counter := UInt(7)
@@ -143,7 +147,7 @@ class SPIFlashModule extends Module {
     }
     when (sub_state === subst_issue_instr) {
       io.SI := PP(counter(2,0))
-      counter := counter -1
+      counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_send_addr
         counter := UInt(23)
@@ -153,18 +157,17 @@ class SPIFlashModule extends Module {
       io.SI := io.flash_addr(counter(4, 0))
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
-        sub_state = subst_send_data
+        sub_state := subst_send_data
         counter(2, 0) := UInt(7, 3)
         counter(4, 3) := UInt(0, 2)
       }
     }
     when (sub_state === subst_send_data) {
-      io.SI := io.flash_data_in
-      counter = counter - Uint(1)
-      io.quad_io(0) := io.flash_data_in(counter)
+      io.SI := io.flash_data_in(counter(4,0))
+      counter := counter - UInt(1)
       when (counter(2,0) === UInt(0, 3)) {
-        counter(4, 3) := counter(4, 3) + 1
-        when (counter(4, 3) === UInt(3, 2) {
+        counter(4, 3) := counter(4, 3) + UInt(1)
+        when (counter(4, 3) === UInt(3, 2)) {
           sub_state := subst_req_sr1
           counter := UInt(7)
         }
@@ -173,7 +176,7 @@ class SPIFlashModule extends Module {
 
     when (sub_state === subst_req_sr1) {
       io.SI := RDSR1(counter(2,0))
-      counter := counter - 1
+      counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_recv_sr1
         counter := UInt(7)
@@ -181,8 +184,8 @@ class SPIFlashModule extends Module {
     }
     when (sub_state === subst_recv_sr1) {
       reg_buffer(counter(2,0)) := io.quad_io(1)
-      when (counter === Uint(0)) {
-        subst := subst_check_r1
+      when (counter === UInt(0)) {
+        sub_state := subst_check_r1
       }
     }
   }
@@ -198,11 +201,18 @@ class SPIFlashModule extends Module {
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
-  for (i <- 0 until 200) {
+  for (i <- 0 until 120) {
     poke(c.io.flash_en, 1)
     poke(c.io.flash_write, 0)
     poke(c.io.flash_addr, 0xff00ff)
     poke(c.io.flash_data_in, 0xffffffff)
+    step(1)
+  }
+  for (i <- 0 until 200) {
+    poke(c.io.flash_en, 1)
+    poke(c.io.flash_write, 1)
+    poke(c.io.flash_addr, 0x731731)
+    poke(c.io.flash_data_in, 0x8cef8cef)
     step(1)
   }
 }
