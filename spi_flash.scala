@@ -35,7 +35,7 @@ class SPIFlashModule extends Module {
   val subst_idle = UInt(0, 6)
   val subst_set_wren = UInt(1, 6)
   val subst_check_wren = UInt(2, 6)
-  val subst_read_req = UInt(3, 6)
+  val subst_req_sr1 = UInt(3, 6)
   val subst_issue_instr = UInt(4, 6)
   val subst_send_addr = UInt(5, 6)
   val subst_read_data_byte = UInt(6, 6)
@@ -48,6 +48,7 @@ class SPIFlashModule extends Module {
   val write_old = Reg(init = UInt(0, 1))
   val addr_old = Reg(init = UInt(0, 24))
   val buffer = Reg(init = UInt(0, 32))
+  val reg_buffer = Reg(init = UInt(0, 8))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | ((state === st_idle) & (addr_old === io.flash_addr) &
@@ -127,7 +128,63 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_write) {
-    state := st_finish
+    when (sub_state === subst_set_wren) {
+      io.SI := WREN(counter(2,0))
+      counter := counter - 1
+      when (counter === UInt(0)) {
+        sub_state := subst_wait_cs_1
+        counter := UInt(7)
+        cs := UInt(1)
+      }
+    }
+    when (sub_state === subst_wait_cs_1) {
+      sub_state := subst_issue_instr
+      cs := UInt(0)
+    }
+    when (sub_state === subst_issue_instr) {
+      io.SI := PP(counter(2,0))
+      counter := counter -1
+      when (counter === UInt(0)) {
+        sub_state := subst_send_addr
+        counter := UInt(23)
+      }
+    }
+    when (sub_state === subst_send_addr) {
+      io.SI := io.flash_addr(counter(4, 0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state = subst_send_data
+        counter(2, 0) := UInt(7, 3)
+        counter(4, 3) := UInt(0, 2)
+      }
+    }
+    when (sub_state === subst_send_data) {
+      io.SI := io.flash_data_in
+      counter = counter - Uint(1)
+      io.quad_io(0) := io.flash_data_in(counter)
+      when (counter(2,0) === UInt(0, 3)) {
+        counter(4, 3) := counter(4, 3) + 1
+        when (counter(4, 3) === UInt(3, 2) {
+          sub_state := subst_req_sr1
+          counter := UInt(7)
+        }
+      }
+    }
+
+    when (sub_state === subst_req_sr1) {
+      io.SI := RDSR1(counter(2,0))
+      counter := counter - 1
+      when (counter === UInt(0)) {
+        sub_state := subst_recv_sr1
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_recv_sr1) {
+      reg_buffer(counter(2,0)) := io.quad_io(1)
+      when (counter === Uint(0)) {
+        subst := subst_check_r1
+      }
+    }
   }
 
   when (state === st_finish) {
@@ -135,6 +192,7 @@ class SPIFlashModule extends Module {
     addr_old := io.flash_addr
     write_old := io.flash_write
   }
+
 
   io.cs := cs
 }
