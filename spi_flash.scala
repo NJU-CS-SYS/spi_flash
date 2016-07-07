@@ -12,6 +12,7 @@ class SPIFlashModule extends Module {
     val SI = UInt(OUTPUT, 1)
     val tri_si = UInt(OUTPUT, 1)
     val cs = UInt(OUTPUT, 1)
+    val ready = UInt(OUTPUT, 1)
   }
 
   // cmd definition
@@ -202,19 +203,14 @@ class SPIFlashModule extends Module {
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
-  for (i <- 0 until 120) {
-    poke(c.io.flash_en, 1)
-    poke(c.io.flash_write, 0)
-    poke(c.io.flash_addr, 0xff00ff)
-    poke(c.io.flash_data_in, 0xffffffff)
-    step(1)
-  }
-  for (i <- 0 until 200) {
-    poke(c.io.flash_en, 1)
-    poke(c.io.flash_write, 1)
-    poke(c.io.flash_addr, 0x731731)
-    poke(c.io.flash_data_in, 0x8cef8cef)
-    step(1)
+  for (addr <- 0 until 10) {
+    for (i <- 0 until 120) {
+      poke(c.io.flash_en, 1)
+      poke(c.io.flash_write, 0)
+      poke(c.io.flash_addr, 4*addr)
+      poke(c.io.flash_data_in, 0xffffffff)
+      step(1)
+    }
   }
 }
 
