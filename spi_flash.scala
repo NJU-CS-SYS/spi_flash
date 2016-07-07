@@ -10,7 +10,9 @@ class SPIFlashModule extends Module {
     val flash_data_out = UInt(OUTPUT, 32)
     val state_to_cpu = UInt(OUTPUT)
     val SI = UInt(OUTPUT, 1)
+    val WP = UInt(OUTPUT, 1)
     val tri_si = UInt(OUTPUT, 1)
+    val tri_wp = UInt(OUTPUT, 1)
     val cs = UInt(OUTPUT, 1)
     val ready = UInt(OUTPUT, 1)
   }
@@ -66,6 +68,7 @@ class SPIFlashModule extends Module {
   val reg_buffer = Reg(init = UInt(0, 8))
   val reg_buffer_sr1 = Reg(init = UInt(0, 8))
   val reg_buffer_cr = Reg(init = UInt(0, 8))
+  val err_counter = Reg(init = UInt(0, 15))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | ((state === st_idle) & (addr_old === io.flash_addr) &
@@ -75,6 +78,8 @@ class SPIFlashModule extends Module {
   io.SI := UInt(0)
   io.tri_si := UInt(0)
   io.state_to_cpu := Cat(state, sub_state)
+  io.WP := UInt(0)
+  io.tri_wp := UInt(1)
 
 
   when (state === st_idle) {
@@ -93,6 +98,8 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_set_quad) {
+    io.WP := UInt(1)
+    io.tri_wp := UInt(0)
     when (sub_state === subst_req_cr) {
       io.SI := RDCR(counter(2,0))
       counter := counter - UInt(1)
@@ -147,7 +154,7 @@ class SPIFlashModule extends Module {
       when (counter === UInt(0)) {
         sub_state := subst_send_cr
         counter := UInt(7)
-        reg_buffer_cr := reg_buffer_cr | UInt(2, 8) // set QUAD bit
+        reg_buffer_cr := reg_buffer_cr | UInt(0xc2, 8) // set QUAD bit
       }
     }
     when (sub_state === subst_send_cr) {
@@ -177,12 +184,19 @@ class SPIFlashModule extends Module {
       when (counter === UInt(0)) {
         when (io.quad_io(1) === UInt(1)) {
           sub_state := subst_check_wip_1
+          err_counter := err_counter + UInt(1)
         }
         .otherwise {
           state := st_read
           sub_state := subst_issue_instr
           counter := UInt(7)
+          io.WP := UInt(0)
+          io.tri_wp := UInt(1)
         }
+      }
+      when (err_counter > UInt(1000)) {
+        err_counter := err_counter
+        sub_state := sub_state
       }
     }
   }

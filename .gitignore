@@ -3,3 +3,4 @@
 !build.sbt
 !*.v
 !*.xdc
+SPIFlashModule*.v

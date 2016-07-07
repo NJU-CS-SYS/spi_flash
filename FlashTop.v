@@ -72,11 +72,20 @@ SPIFlashModule SPIFlashModule(
 	.io_SI(SI),
 	.io_tri_si(tri_si),
 	.io_cs(flash_cs),
-	.io_ready(flash_ready)
+	.io_ready(flash_ready),
+    .io_tri_wp(tri_wp),
+    .io_WP(WP)
 );
 
-assign flash_dq[3:0] = tri_si ? 4'bzzzz : {3'd0, SI};
-assign quad_io[3:0] = tri_si ? flash_dq[3:0] : 4'bzzzz;
+assign flash_dq[0] = tri_si ? 1'bz : SI;
+assign flash_dq[1] = 1'bz;
+assign flash_dq[2] = tri_wp ? 1'bz : WP;
+assign flash_dq[3] = 1'bz;
+
+assign quad_io[0] = tri_si ? flash_dq[0] : 1'bz;
+assign quad_io[1] = flash_dq[1];
+assign quad_io[2] = tri_wp ? flash_dq[2] : 1'bz;
+assign quad_io[3] = flash_dq[3];
 
 seg_ctrl sc(
 	.clk(clk_50MHz),
