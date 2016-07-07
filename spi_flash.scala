@@ -126,7 +126,7 @@ class SPIFlashModule extends Module {
         buffer(3 + 8*3, 0 + 8*3) := io.quad_io
         cs := UInt(1)
         state := st_finish
-        sub_state := st_idle
+        sub_state := subst_idle
       }
     }
   }
@@ -160,16 +160,19 @@ class SPIFlashModule extends Module {
         sub_state := subst_send_data
         counter(2, 0) := UInt(7, 3)
         counter(4, 3) := UInt(0, 2)
+        counter(5) := UInt(0, 1)
       }
     }
     when (sub_state === subst_send_data) {
       io.SI := io.flash_data_in(counter(4,0))
-      counter := counter - UInt(1)
-      when (counter(2,0) === UInt(0, 3)) {
-        counter(4, 3) := counter(4, 3) + UInt(1)
+      counter(2, 0) := counter(2, 0) - UInt(1)
+      when (counter(2, 0) === UInt(0, 3)) {
+        counter(4, 3) := counter(4, 3) + UInt(1, 2)
         when (counter(4, 3) === UInt(3, 2)) {
-          sub_state := subst_req_sr1
           counter := UInt(7)
+          cs := UInt(1)
+          state := st_finish
+          sub_state := subst_idle
         }
       }
     }
