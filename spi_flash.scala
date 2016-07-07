@@ -15,6 +15,8 @@ class SPIFlashModule extends Module {
     val tri_wp = UInt(OUTPUT, 1)
     val cs = UInt(OUTPUT, 1)
     val ready = UInt(OUTPUT, 1)
+    val sr1 = UInt(OUTPUT, 8)
+    val cr = UInt(OUTPUT, 8)
   }
 
   // cmd definition
@@ -56,6 +58,10 @@ class SPIFlashModule extends Module {
   val subst_check_wip_2 = UInt(17,6)
   val subst_wait_cs_2 = UInt(18, 6)
   val subst_wait_cs_3 = UInt(19, 6)
+  val subst_wait_cs_4 = UInt(20, 6)
+  val subst_wait_cs_5 = UInt(21, 6)
+  val subst_req_cr_2 = UInt(22,6)
+  val subst_recv_cr_2 = UInt(23,6)
 
   val state = Reg(init = st_idle)
   val sub_state = Reg(init = st_idle)
@@ -65,7 +71,6 @@ class SPIFlashModule extends Module {
   val write_old = Reg(init = UInt(0, 1))
   val addr_old = Reg(init = UInt(0, 24))
   val buffer = Reg(init = UInt(0, 32))
-  val reg_buffer = Reg(init = UInt(0, 8))
   val reg_buffer_sr1 = Reg(init = UInt(0, 8))
   val reg_buffer_cr = Reg(init = UInt(0, 8))
   val err_counter = Reg(init = UInt(0, 15))
@@ -113,6 +118,7 @@ class SPIFlashModule extends Module {
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_wait_cs_1
+        cs := UInt(1)
         counter := UInt(7)
       }
     }
@@ -133,6 +139,7 @@ class SPIFlashModule extends Module {
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_wait_cs_2
+        cs := UInt(1)
         counter := UInt(7)
       }
     }
@@ -182,21 +189,50 @@ class SPIFlashModule extends Module {
       reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
-        when (io.quad_io(1) === UInt(1)) {
-          sub_state := subst_check_wip_1
-          err_counter := err_counter + UInt(1)
-        }
-        .otherwise {
-          state := st_read
-          sub_state := subst_issue_instr
-          counter := UInt(7)
-          io.WP := UInt(0)
-          io.tri_wp := UInt(1)
-        }
+        sub_state := subst_wait_cs_4
+        cs := UInt(1)
       }
-      when (err_counter > UInt(1000)) {
-        err_counter := err_counter
+    }
+    when (sub_state === subst_wait_cs_4) {
+      cs := UInt(0)
+      counter := UInt(7)
+      when (reg_buffer_sr1(0) === UInt(1)) { // wait writing process
+        sub_state := subst_check_wip_1
+        err_counter := err_counter + UInt(1)
+      }
+      .otherwise {
+        sub_state := subst_req_cr_2
+      }
+    }
+    when (sub_state === subst_req_cr_2) {
+      io.SI := RDCR(counter(2,0))
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_recv_cr_2
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_recv_cr_2) {
+      reg_buffer_cr(counter(2,0)) := io.quad_io(1)
+      counter := counter - UInt(1)
+      when (counter === UInt(0)) {
+        sub_state := subst_wait_cs_5
+        cs := UInt(1)
+        counter := UInt(7)
+      }
+    }
+    when (sub_state === subst_wait_cs_5) {
+      when (reg_buffer_cr(7, 6) =/= UInt(3, 2)) {
+        state := state
         sub_state := sub_state
+      }
+      .otherwise {
+        cs := UInt(0)
+        state := st_read
+        sub_state := subst_issue_instr
+        counter := UInt(7)
+        io.WP := UInt(0)
+        io.tri_wp := UInt(1)
       }
     }
   }
@@ -307,7 +343,7 @@ class SPIFlashModule extends Module {
       }
     }
     when (sub_state === subst_recv_sr1) {
-      reg_buffer(counter(2,0)) := io.quad_io(1)
+      reg_buffer_sr1(counter(2,0)) := io.quad_io(1)
       when (counter === UInt(0)) {
         sub_state := subst_check_r1
       }
@@ -323,16 +359,28 @@ class SPIFlashModule extends Module {
   io.flash_data_out := buffer
   io.cs := cs
   io.ready := not_move | (state === st_finish)
+  io.sr1 := reg_buffer_sr1
+  io.cr := reg_buffer_cr
 }
 
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
-  for (i <- 0 until 300) {
+  for (i <- 0 until 80) {
     poke(c.io.flash_en, 1)
     poke(c.io.flash_write, 0)
     poke(c.io.flash_addr, 0xff00ff)
+    poke(c.io.quad_io, 0x0)
     poke(c.io.flash_data_in, 0xffffffff)
     step(1)
   }
+  for (i <- 0 until 90) {
+    poke(c.io.flash_en, 1)
+    poke(c.io.flash_write, 0)
+    poke(c.io.flash_addr, 0xff00ff)
+    poke(c.io.quad_io, 0xf)
+    poke(c.io.flash_data_in, 0xffffffff)
+    step(1)
+  }
+
 }
 
 object hello {

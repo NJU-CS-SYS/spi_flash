@@ -14,7 +14,9 @@ module FlashTop(
     output [7:0] seg_ctrl,
 
 	inout [3:0] flash_dq,
-    output flash_cs
+    output flash_cs,
+    output [7:0] sr1,
+    output [7:0] cr
 );
 
 reg flash_en;
@@ -74,7 +76,9 @@ SPIFlashModule SPIFlashModule(
 	.io_cs(flash_cs),
 	.io_ready(flash_ready),
     .io_tri_wp(tri_wp),
-    .io_WP(WP)
+    .io_WP(WP),
+    .io_sr1(sr1),
+    .io_cr(cr)
 );
 
 assign flash_dq[0] = tri_si ? 1'bz : SI;
@@ -91,7 +95,7 @@ seg_ctrl sc(
 	.clk(clk_50MHz),
 	.hex1(state_to_cpu[0*4+3 : 0*4+0]),
 	.hex2(state_to_cpu[1*4+3 : 1*4+0]),
-    .hex3({1'b0, state_to_cpu[2*4+2 : 2*4+0]}),
+    .hex3(state_to_cpu[2*4+3 : 2*4+0]),
 	.hex4(buffer_val[3*4+3 : 3*4+0]),
 	.hex5(buffer_val[4*4+3 : 4*4+0]),
 	.hex6(buffer_val[5*4+3 : 5*4+0]),
