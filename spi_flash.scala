@@ -213,6 +213,15 @@ class SPIFlashModule extends Module {
 class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
   for (i <- 0 until 80) {
     poke(c.io.flash_en, 1)
+    poke(c.io.flash_write, 1)
+    poke(c.io.flash_addr, 0xff00ff)
+    poke(c.io.quad_io, 0x0)
+    poke(c.io.flash_data_in, 0x8cef8cef)
+    step(1)
+  }
+
+  for (i <- 0 until 80) {
+    poke(c.io.flash_en, 1)
     poke(c.io.flash_write, 0)
     poke(c.io.flash_addr, 0xff00ff)
     poke(c.io.quad_io, 0x0)

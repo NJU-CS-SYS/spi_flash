@@ -23,7 +23,7 @@ reg flash_en;
 reg flash_write;
 reg [23:0] flash_addr;
 // reg [31:0] flash_data_in;
-reg [22:0] counter;
+reg [24:0] counter;
 
 wire [11:0] state_to_cpu;
 // wire [31:0] flash_data_out;
@@ -43,15 +43,25 @@ always @ (posedge clk_50MHz) begin
     end
     else begin
         flash_en <= 1;
-        if (flash_ready) begin
-            counter <= counter + 1;
-        end
-        flash_addr <= {counter[21:0], 2'd0};
+        counter <= counter + 1;
         if (counter[22] == 1'b0) begin
             flash_write <= 1;
         end
         if (counter[22] == 1'b1) begin
             flash_write <= 0;
+        end
+
+        if (counter[24:23] == 2'd0) begin
+            flash_addr <= 24'h0f0f0f;
+        end
+        else if (counter[24:23] == 2'd1) begin
+            flash_addr <= 24'hf0f0f0;
+        end
+        else if (counter[24:23] == 2'd2) begin
+            flash_addr <= 24'h666666;
+        end
+        else begin
+            flash_addr <= 24'h999999;
         end
     end
 end
