@@ -24,6 +24,7 @@ reg flash_write;
 reg [23:0] flash_addr;
 // reg [31:0] flash_data_in;
 reg [24:0] counter;
+reg sck_gate;
 
 wire [11:0] state_to_cpu;
 // wire [31:0] flash_data_out;
@@ -35,6 +36,7 @@ wire [31:0] buffer_val;
 
 always @ (posedge clk_50MHz) begin
     if(reset) begin
+        sck_gate <= 1;
         flash_en <= 0;
         flash_write <= 0;
         flash_addr <= 0;
@@ -42,8 +44,19 @@ always @ (posedge clk_50MHz) begin
         counter <= 0;
     end
     else begin
-        flash_en <= 1;
+        if (~flash_cs) begin
+            sck_gate <= 1'b0;
+        end
+        else begin
+            sck_gate <= 1'b1;
+        end
         counter <= counter + 1;
+        if (counter > 25'h1000000) begin
+            flash_en <= 1;
+            flash_addr <= counter[23:0];
+        end
+        /*
+        flash_en <= 1;
         if (counter[22] == 1'b0) begin
             flash_write <= 1;
         end
@@ -63,6 +76,7 @@ always @ (posedge clk_50MHz) begin
         else begin
             flash_addr <= 24'h999999;
         end
+        */
     end
 end
 
@@ -88,8 +102,11 @@ SPIFlashModule SPIFlashModule(
     .io_tri_wp(tri_wp),
     .io_WP(WP),
     .io_sr1(sr1),
-    .io_cr(cr)
+    .io_cr(cr),
+    .io_read_id(1'b1),
+    .io_sck_gate()
 );
+
 
 assign flash_dq[0] = tri_si ? 1'bz : SI;
 assign flash_dq[1] = 1'bz;
@@ -105,7 +122,7 @@ seg_ctrl sc(
 	.clk(clk_50MHz),
 	.hex1(state_to_cpu[0*4+3 : 0*4+0]),
 	.hex2(state_to_cpu[1*4+3 : 1*4+0]),
-    .hex3(state_to_cpu[2*4+3 : 2*4+0]),
+	.hex3(buffer_val[2*4+3 : 2*4+0]),
 	.hex4(buffer_val[3*4+3 : 3*4+0]),
 	.hex5(buffer_val[4*4+3 : 4*4+0]),
 	.hex6(buffer_val[5*4+3 : 5*4+0]),
@@ -114,6 +131,8 @@ seg_ctrl sc(
 	.seg_out(seg_out),
 	.seg_ctrl(seg_ctrl)
 );
+
+wire gated_sck = sck_gate ? 1'b0 : ~clk_50MHz;
 
 STARTUPE2 #(
 	.PROG_USR("FALSE"),  // Activate program event security feature. Requires encrypted bitstreams.
@@ -129,7 +148,7 @@ STARTUPE2_inst (
 	.GTS(1'b0),             // 1-bit input: Global 3-state input (GTS cannot be used for the port name)
 	.KEYCLEARB(1'b0),       // 1-bit input: Clear AES Decrypter Key input from Battery-Backed RAM (BBRAM)
 	.PACK(1'b0),             // 1-bit input: PROGRAM acknowledge input
-	.USRCCLKO(~clk_50MHz),   // 1-bit input: User CCLK input
+	.USRCCLKO(gated_sck),   // 1-bit input: User CCLK input
 	.USRCCLKTS(1'b0), // 1-bit input: User CCLK 3-state enable input
 	.USRDONEO(1'b1),   // 1-bit input: User DONE pin output control
 	.USRDONETS(1'b0)  // 1-bit input: User DONE 3-state enable output
