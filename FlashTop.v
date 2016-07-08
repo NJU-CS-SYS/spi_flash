@@ -51,11 +51,14 @@ always @ (posedge clk_50MHz) begin
             sck_gate <= 1'b1;
         end
         counter <= counter + 1;
+
+        /*
         if (counter > 25'h1000000) begin
             flash_en <= 1;
             flash_addr <= counter[23:0];
         end
-        /*
+        */
+
         flash_en <= 1;
         if (counter[22] == 1'b0) begin
             flash_write <= 1;
@@ -76,7 +79,6 @@ always @ (posedge clk_50MHz) begin
         else begin
             flash_addr <= 24'h999999;
         end
-        */
     end
 end
 
@@ -103,7 +105,7 @@ SPIFlashModule SPIFlashModule(
     .io_WP(WP),
     .io_sr1(sr1),
     .io_cr(cr),
-    .io_read_id(1'b1),
+    .io_read_id(1'b0),
     .io_sck_gate()
 );
 

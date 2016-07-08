@@ -86,6 +86,7 @@ class SPIFlashModule extends Module {
   val err_counter = Reg(init = UInt(0, 15))
   val sck_gate = Reg(init = UInt(1, 1))
   val read_id_addr = Reg(init = UInt(0x000001, 24))
+  val cs_counter = Reg(init = UInt(0, 3))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | ((state === st_idle) & (addr_old === io.flash_addr) &
@@ -99,6 +100,7 @@ class SPIFlashModule extends Module {
   io.tri_wp := UInt(1)
 
   when (state === st_idle) {
+    cs := UInt(1)
     when(~not_move) {
       cs := UInt(0)
       counter := UInt(7)
@@ -109,11 +111,13 @@ class SPIFlashModule extends Module {
         }
         .elsewhen (~io.flash_write) {
           state := st_read
-          sub_state := subst_issue_instr
+          sub_state := subst_wait_cs_init
+          cs_counter := UInt(0)
         }
         .elsewhen (io.flash_write) {
           state := st_write
-          sub_state := subst_set_wren
+          sub_state := subst_wait_cs_init
+          cs_counter := UInt(0)
         }
       }
     }
@@ -152,6 +156,14 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_read) {
+    when (sub_state === subst_wait_cs_init) {
+      cs_counter := cs_counter - UInt(1)
+      when (cs_counter === UInt(0)) {
+        sub_state := subst_issue_instr
+        cs := UInt(0)
+        counter := UInt(7)
+      }
+    }
     when (sub_state === subst_issue_instr) {
       io.SI := READ(counter(2, 0))
       counter := counter - UInt(1)
@@ -185,18 +197,32 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_write) {
+    when (sub_state === subst_wait_cs_init) {
+      cs_counter := cs_counter - UInt(1)
+      when (cs_counter === UInt(0)) {
+        sub_state := subst_set_wren
+        cs := UInt(0)
+        counter := UInt(7)
+      }
+    }
     when (sub_state === subst_set_wren) {
       io.SI := WREN(counter(2,0))
       counter := counter - UInt(1)
       when (counter === UInt(0)) {
         sub_state := subst_wait_cs_1
-        counter := UInt(7)
+        cs_counter := UInt(3)
         cs := UInt(1)
       }
     }
     when (sub_state === subst_wait_cs_1) {
-      sub_state := subst_issue_instr
-      cs := UInt(0)
+      cs_counter := cs_counter - UInt(1)
+      when (cs_counter === UInt(1)) {
+        cs := UInt(0)
+      }
+      when (cs_counter === UInt(0)) {
+        counter := UInt(7)
+        sub_state := subst_issue_instr
+      }
     }
     when (sub_state === subst_issue_instr) {
       io.SI := PP(counter(2,0))
@@ -223,7 +249,7 @@ class SPIFlashModule extends Module {
         counter(4, 3) := counter(4, 3) + UInt(1, 2)
         when (counter(4, 3) === UInt(3, 2)) {
           sub_state := subst_wait_cs_3
-          counter := UInt(7)
+          cs_counter := UInt(3)
           cs := UInt(1)
         }
       }
@@ -246,8 +272,14 @@ class SPIFlashModule extends Module {
     */
 
 		when (sub_state === subst_wait_cs_3) {
-      sub_state := subst_check_wip_1
-      cs := UInt(0)
+      cs_counter := cs_counter - UInt(1)
+      when (cs_counter === UInt(1)) {
+        cs := UInt(0)
+      }
+      when (cs_counter === UInt(0)) {
+        sub_state := subst_check_wip_1
+        counter := UInt(7)
+      }
     }
     when (sub_state === subst_check_wip_1) {
       io.SI := RDSR1(counter(2,0))
@@ -266,7 +298,6 @@ class SPIFlashModule extends Module {
       }
     }
     when (sub_state === subst_wait_cs_4) {
-      cs := UInt(0)
       counter := UInt(7)
       when (reg_buffer_sr1(0) === UInt(1)) { // wait writing process
         sub_state := subst_check_wip_1
@@ -281,7 +312,6 @@ class SPIFlashModule extends Module {
         sub_state := subst_idle
       }
     }
-
   }
 
   when (state === st_finish) {
@@ -302,16 +332,16 @@ class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
   for (i <- 0 until 200) {
     poke(c.io.flash_en, 1)
     poke(c.io.flash_write, 0)
-    poke(c.io.read_id, 1)
+    poke(c.io.read_id, 0)
     poke(c.io.flash_addr, 0xff00ff)
     poke(c.io.quad_io, 0x0)
     poke(c.io.flash_data_in, 0x8cef8cef)
     step(1)
   }
 
-  for (i <- 0 until 80) {
+  for (i <- 0 until 200) {
     poke(c.io.flash_en, 1)
-    poke(c.io.flash_write, 0)
+    poke(c.io.flash_write, 1)
     poke(c.io.flash_addr, 0xff00ff)
     poke(c.io.quad_io, 0x0)
     poke(c.io.flash_data_in, 0xffffffff)
