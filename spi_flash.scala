@@ -83,10 +83,12 @@ class SPIFlashModule extends Module {
   val reg_buffer_sr1 = Reg(init = UInt(0, 8))
   val reg_buffer_cr = Reg(init = UInt(0, 8))
   val reg_buffer_id = Reg(init = UInt(0, 24))
-  val err_counter = Reg(init = UInt(0, 15))
+  val err_counter = Reg(init = UInt(0, 20))
   val sck_gate = Reg(init = UInt(1, 1))
   val read_id_addr = Reg(init = UInt(0x000001, 24))
-  val cs_counter = Reg(init = UInt(0, 3))
+  val cs_counter = Reg(init = UInt(0, 5))
+  val after_read = Reg(init = UInt(0, 1))
+  val after_write = Reg(init = UInt(0, 1))
 
   val not_move = ((state === st_idle & io.flash_en === UInt(0))
     | ((state === st_idle) & (addr_old === io.flash_addr) &
@@ -124,6 +126,8 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_read_id) {
+    after_read := UInt(1)
+    after_write := UInt(0)
     when (sub_state === subst_wait_cs_init) {
       sub_state := subst_issue_instr
       sck_gate := UInt(0)
@@ -156,6 +160,8 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_read) {
+    after_read := UInt(1)
+    after_write := UInt(0)
     when (sub_state === subst_wait_cs_init) {
       cs_counter := cs_counter - UInt(1)
       when (cs_counter === UInt(0)) {
@@ -197,6 +203,8 @@ class SPIFlashModule extends Module {
   }
 
   when (state === st_write) {
+    after_read := UInt(0)
+    after_write := UInt(1)
     when (sub_state === subst_wait_cs_init) {
       cs_counter := cs_counter - UInt(1)
       when (cs_counter === UInt(0)) {
@@ -295,16 +303,24 @@ class SPIFlashModule extends Module {
       when (counter === UInt(0)) {
         sub_state := subst_wait_cs_4
         cs := UInt(1)
+        cs_counter := UInt(10)
       }
     }
     when (sub_state === subst_wait_cs_4) {
       counter := UInt(7)
+      cs_counter := cs_counter - UInt(1)
       when (reg_buffer_sr1(0) === UInt(1)) { // wait writing process
-        sub_state := subst_check_wip_1
         err_counter := err_counter + UInt(1)
-        when (err_counter > UInt(1024)) {
-          state := state
-          sub_state := sub_state
+        when (cs_counter === UInt(1)) {
+          cs := UInt(0)
+        }
+        when (cs_counter === UInt(0)) {
+          sub_state := subst_check_wip_1
+        }
+        when (err_counter > UInt(0x00080000)) { // skip ? have a try !
+          err_counter := UInt(0)
+          state := st_finish
+          sub_state := subst_idle
         }
       }
       .otherwise {
@@ -320,11 +336,11 @@ class SPIFlashModule extends Module {
     write_old := io.flash_write
   }
 
-  io.flash_data_out := Cat(reg_buffer_id, UInt(0, 8))
+  io.flash_data_out := buffer
   io.cs := cs
   io.ready := not_move | (state === st_finish)
   io.sr1 := reg_buffer_sr1
-  io.cr := reg_buffer_cr
+  io.cr := Cat(after_read, after_write, reg_buffer_cr(5, 0))
   io.sck_gate := sck_gate
 }
 
@@ -334,7 +350,7 @@ class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
     poke(c.io.flash_write, 0)
     poke(c.io.read_id, 0)
     poke(c.io.flash_addr, 0xff00ff)
-    poke(c.io.quad_io, 0x0)
+    poke(c.io.quad_io, 0xf)
     poke(c.io.flash_data_in, 0x8cef8cef)
     step(1)
   }
@@ -343,7 +359,7 @@ class FlashModuleTests(c: SPIFlashModule) extends Tester(c) {
     poke(c.io.flash_en, 1)
     poke(c.io.flash_write, 1)
     poke(c.io.flash_addr, 0xff00ff)
-    poke(c.io.quad_io, 0x0)
+    poke(c.io.quad_io, 0xf)
     poke(c.io.flash_data_in, 0xffffffff)
     step(1)
   }
